@@ -1,0 +1,278 @@
+{
+  "name": "Speech Expert - Synthesize and download speech",
+  "nodes": [
+    {
+      "id": "run-manually",
+      "name": "Run manually",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "create-operation",
+      "name": "Create operation",
+      "type": "n8n-nodes-speech-expert.speechExpert",
+      "typeVersion": 1,
+      "position": [
+        480,
+        0
+      ],
+      "parameters": {
+        "resource": "synthesis",
+        "operation": "create",
+        "text": "Привет! Это проверка синтеза речи в Speech Expert.",
+        "voice": "pavel-higgs",
+        "engine": "higgs",
+        "language": "ru-RU",
+        "speed": 1,
+        "sampleRate": 48000,
+        "simplify": true
+      },
+      "retryOnFail": false
+    },
+    {
+      "id": "track-operation",
+      "name": "Track operation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        0
+      ],
+      "parameters": {
+        "jsCode": "if ($input.all().length !== 1) throw new Error('This example expects exactly one operation. Retain every returned ID before continuing.');\nconst operation = $input.first().json;\nif (operation.error || typeof operation.id !== 'string' || !operation.id) throw new Error('No valid operation ID returned. Inspect this execution before creating another operation.');\nreturn [{json:{operationId:operation.id,deadline:Date.now()+600000}}];"
+      }
+    },
+    {
+      "id": "wait-5-seconds",
+      "name": "Wait 5 seconds",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        960,
+        0
+      ],
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": 5,
+        "unit": "seconds"
+      }
+    },
+    {
+      "id": "get-operation",
+      "name": "Get operation",
+      "type": "n8n-nodes-speech-expert.speechExpert",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        0
+      ],
+      "parameters": {
+        "resource": "synthesis",
+        "operation": "get",
+        "operationId": "={{ $('Track operation').first().json.operationId }}",
+        "simplify": true
+      },
+      "retryOnFail": false
+    },
+    {
+      "id": "inspect-operation",
+      "name": "Inspect operation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const operation = $input.first().json;\nconst tracked = $('Track operation').first().json;\nif (operation.error) throw new Error('Operation ' + tracked.operationId + ' failed: ' + JSON.stringify(operation.error));\nif (operation.id !== tracked.operationId || typeof operation.done !== 'boolean') throw new Error('Unexpected status for operation ' + tracked.operationId);\nif (!operation.done && (Date.now() >= tracked.deadline || $runIndex >= 119)) throw new Error('Polling stopped. Check operation ' + tracked.operationId + ' before starting another paid task.');\nreturn [{json:operation}];"
+      }
+    },
+    {
+      "id": "operation-finished",
+      "name": "Operation finished?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1680,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "done",
+              "leftValue": "={{ $json.done }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "download-audio",
+      "name": "Download audio",
+      "type": "n8n-nodes-speech-expert.speechExpert",
+      "typeVersion": 1,
+      "position": [
+        1920,
+        -80
+      ],
+      "parameters": {
+        "resource": "synthesis",
+        "operation": "download",
+        "operationId": "={{ $('Track operation').first().json.operationId }}",
+        "binaryPropertyName": "audio"
+      },
+      "retryOnFail": false
+    },
+    {
+      "id": "workflow-guide",
+      "name": "Workflow guide",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -350
+      ],
+      "parameters": {
+        "content": "## Speech Expert synthesis\nInstall n8n-nodes-speech-expert and select Speech Expert API credentials in Create operation, Get operation, and Download audio. Review the sample text and voice before executing. This example uses a short Russian sentence with Pavel/Higgs. Get Voices lists current voice and engine availability.\n\nCreate spends credits exactly once in this flow. Wait and Get poll for up to ten minutes or 120 responses. API errors stop the flow. Download audio runs only after successful completion and returns WAV in binary.audio. If a timeout occurs, keep the operation ID and use Get before creating another paid task.\n\nThis example handles one input item per execution. Validate single item rejects a batch before any source upload or paid Create call.",
+        "width": 1120,
+        "height": 320
+      }
+    },
+    {
+      "id": "validate-single-item",
+      "name": "Validate single item",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const items = $input.all();\nif (items.length !== 1) throw new Error('This example processes one item at a time. Run the complete sequence separately for each batch item.');\nreturn items;"
+      }
+    }
+  ],
+  "connections": {
+    "Run manually": {
+      "main": [
+        [
+          {
+            "node": "Validate single item",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create operation": {
+      "main": [
+        [
+          {
+            "node": "Track operation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Track operation": {
+      "main": [
+        [
+          {
+            "node": "Wait 5 seconds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 5 seconds": {
+      "main": [
+        [
+          {
+            "node": "Get operation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get operation": {
+      "main": [
+        [
+          {
+            "node": "Inspect operation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Inspect operation": {
+      "main": [
+        [
+          {
+            "node": "Operation finished?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Operation finished?": {
+      "main": [
+        [
+          {
+            "node": "Download audio",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait 5 seconds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate single item": {
+      "main": [
+        [
+          {
+            "node": "Create operation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "executionTimeout": 1800
+  },
+  "pinData": {},
+  "tags": []
+}

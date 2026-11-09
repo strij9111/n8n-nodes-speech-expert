@@ -1,0 +1,177 @@
+{
+  "name": "Speech Expert - Upload and preview audio research",
+  "nodes": [
+    {
+      "id": "upload-form",
+      "name": "Upload form",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.4,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "authentication": "basicAuth",
+        "formTitle": "Preview audio research with Speech Expert",
+        "formDescription": "Select a file and review this workflow before use. Configure form Basic Auth and Speech Expert credentials in n8n.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Audio or video file",
+              "fieldName": "audio",
+              "fieldType": "file",
+              "requiredField": true,
+              "multipleFiles": false,
+              "acceptFileTypes": ".wav,.mp3,.m4a,.ogg,.flac,.mp4,.webm"
+            },
+            {
+              "fieldLabel": "New upload UUID (reuse only for the same upload)",
+              "fieldName": "requestId",
+              "fieldType": "text",
+              "requiredField": true
+            }
+          ]
+        },
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "webhookId": "speech-expert-research"
+    },
+    {
+      "id": "upload-source",
+      "name": "Upload source",
+      "type": "n8n-nodes-speech-expert.speechExpert",
+      "typeVersion": 1,
+      "position": [
+        480,
+        0
+      ],
+      "parameters": {
+        "resource": "research",
+        "operation": "uploadSource",
+        "binaryPropertyName": "audio",
+        "requestId": "={{ $json.requestId }}",
+        "sourceName": "n8n research source",
+        "presetId": "prosody_meaning",
+        "simplify": true
+      },
+      "retryOnFail": false
+    },
+    {
+      "id": "preview-research",
+      "name": "Preview research",
+      "type": "n8n-nodes-speech-expert.speechExpert",
+      "typeVersion": 1,
+      "position": [
+        720,
+        0
+      ],
+      "parameters": {
+        "resource": "research",
+        "operation": "preview",
+        "recordingId": "={{ $json.id }}",
+        "presetId": "prosody_meaning",
+        "startSeconds": 0,
+        "endSeconds": "={{ Math.min($json.duration_ms, 120000) / 1000 }}",
+        "instructions": "Describe audible emphasis and alternative interpretations of the intonation.",
+        "evidenceMode": "none",
+        "simplify": true
+      },
+      "retryOnFail": false
+    },
+    {
+      "id": "analyze-after-review",
+      "name": "Analyze after review",
+      "type": "n8n-nodes-speech-expert.speechExpert",
+      "typeVersion": 1,
+      "position": [
+        1080,
+        200
+      ],
+      "parameters": {
+        "resource": "research",
+        "operation": "analyze",
+        "recordingId": "={{ $('Upload source').first().json.id }}",
+        "presetId": "prosody_meaning",
+        "startSeconds": 0,
+        "endSeconds": "={{ Math.min($('Upload source').first().json.duration_ms, 120000) / 1000 }}",
+        "instructions": "Describe audible emphasis and alternative interpretations of the intonation.",
+        "evidenceMode": "none",
+        "maxCredits": "0",
+        "externalAiConsent": false,
+        "simplify": true
+      },
+      "retryOnFail": false
+    },
+    {
+      "id": "workflow-guide",
+      "name": "Workflow guide",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -380
+      ],
+      "parameters": {
+        "content": "## Preview first; analysis is separate\nInstall n8n-nodes-speech-expert and configure API credentials plus Basic Auth for Upload form. Upload a file at least 20 seconds long. Supply a fresh UUID for every new source; reuse it only to retry that same upload. Upload source saves the recording in your Speech Expert archive.\n\nThe connected flow ends at Preview research. Preview validates and returns billing.credits without paid model analysis. Analyze after review is intentionally unconnected, with a zero cap and external consent off. After review, reuse the saved recording ID, set an acceptable Maximum Credits and explicit consent, and run the intended analysis path. Do not repeat an upload just to analyze an existing source. An interrupted Analyze may already have a saved result; use Get Results before retrying. Preview settings and Analyze settings must match.\n\nThis example handles one input item per execution. Validate single item rejects a batch before any source upload or paid Create call.",
+        "width": 1120,
+        "height": 350
+      }
+    },
+    {
+      "id": "validate-single-item",
+      "name": "Validate single item",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const items = $input.all();\nif (items.length !== 1) throw new Error('This example processes one item at a time. Run the complete sequence separately for each batch item.');\nreturn items;"
+      }
+    }
+  ],
+  "connections": {
+    "Upload form": {
+      "main": [
+        [
+          {
+            "node": "Validate single item",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload source": {
+      "main": [
+        [
+          {
+            "node": "Preview research",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate single item": {
+      "main": [
+        [
+          {
+            "node": "Upload source",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "executionTimeout": 1800
+  },
+  "pinData": {},
+  "tags": []
+}

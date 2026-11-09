@@ -1,0 +1,18 @@
+{
+	"node": "n8n-nodes-speech-expert.speechExpert",
+	"nodeVersion": "1.0",
+	"codexVersion": "1.0",
+	"categories": ["Data & Storage"],
+	"resources": {
+		"credentialDocumentation": [
+			{
+				"url": "https://github.com/strij9111/n8n-nodes-speech-expert#credentials"
+			}
+		],
+		"primaryDocumentation": [
+			{
+				"url": "https://github.com/strij9111/n8n-nodes-speech-expert#readme"
+			}
+		]
+	}
+}

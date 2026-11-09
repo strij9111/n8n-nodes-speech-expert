@@ -1,0 +1,293 @@
+{
+  "name": "Speech Expert - Transcribe a file",
+  "nodes": [
+    {
+      "id": "upload-form",
+      "name": "Upload form",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.4,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "authentication": "basicAuth",
+        "formTitle": "Transcribe a file with Speech Expert",
+        "formDescription": "Select a file and review this workflow before use. Configure form Basic Auth and Speech Expert credentials in n8n.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Audio or video file",
+              "fieldName": "audio",
+              "fieldType": "file",
+              "requiredField": true,
+              "multipleFiles": false,
+              "acceptFileTypes": ".wav,.mp3,.m4a,.ogg,.flac,.mp4,.webm"
+            }
+          ]
+        },
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "webhookId": "speech-expert-transcribe"
+    },
+    {
+      "id": "create-operation",
+      "name": "Create operation",
+      "type": "n8n-nodes-speech-expert.speechExpert",
+      "typeVersion": 1,
+      "position": [
+        480,
+        0
+      ],
+      "parameters": {
+        "resource": "transcription",
+        "operation": "create",
+        "binaryPropertyName": "audio",
+        "language": "ru-RU",
+        "modelOverride": "",
+        "summaryPreset": "",
+        "privacyMode": true,
+        "externalAiConsent": false,
+        "simplify": true
+      },
+      "retryOnFail": false
+    },
+    {
+      "id": "track-operation",
+      "name": "Track operation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        0
+      ],
+      "parameters": {
+        "jsCode": "if ($input.all().length !== 1) throw new Error('This example expects exactly one operation. Retain every returned ID before continuing.');\nconst operation = $input.first().json;\nif (operation.error || typeof operation.id !== 'string' || !operation.id) throw new Error('No valid operation ID returned. Inspect this execution before creating another operation.');\nreturn [{json:{operationId:operation.id,deadline:Date.now()+600000}}];"
+      }
+    },
+    {
+      "id": "wait-5-seconds",
+      "name": "Wait 5 seconds",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        960,
+        0
+      ],
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": 5,
+        "unit": "seconds"
+      }
+    },
+    {
+      "id": "get-operation",
+      "name": "Get operation",
+      "type": "n8n-nodes-speech-expert.speechExpert",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        0
+      ],
+      "parameters": {
+        "resource": "transcription",
+        "operation": "get",
+        "operationId": "={{ $('Track operation').first().json.operationId }}",
+        "simplify": true
+      },
+      "retryOnFail": false
+    },
+    {
+      "id": "inspect-operation",
+      "name": "Inspect operation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const operation = $input.first().json;\nconst tracked = $('Track operation').first().json;\nif (operation.error) throw new Error('Operation ' + tracked.operationId + ' failed: ' + JSON.stringify(operation.error));\nif (operation.id !== tracked.operationId || typeof operation.done !== 'boolean') throw new Error('Unexpected status for operation ' + tracked.operationId);\nif (!operation.done && (Date.now() >= tracked.deadline || $runIndex >= 119)) throw new Error('Polling stopped. Check operation ' + tracked.operationId + ' before starting another paid task.');\nreturn [{json:operation}];"
+      }
+    },
+    {
+      "id": "operation-finished",
+      "name": "Operation finished?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1680,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "done",
+              "leftValue": "={{ $json.done }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "transcript",
+      "name": "Transcript",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        -80
+      ],
+      "parameters": {
+        "jsCode": "const operation = $input.first().json;\nif (typeof operation.response?.result !== 'string') throw new Error('Completed operation has no transcript: ' + operation.id);\nreturn [{json:{operationId:operation.id,text:operation.response.result,summary:operation.response?.summarization?.summary ?? null,summaryStatus:operation.response?.summarization_status ?? null}}];"
+      }
+    },
+    {
+      "id": "workflow-guide",
+      "name": "Workflow guide",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -350
+      ],
+      "parameters": {
+        "content": "## Speech Expert transcription\nInstall n8n-nodes-speech-expert and select Speech Expert API credentials in both Speech Expert nodes. Configure Basic Auth on Upload form. The workflow imports inactive.\n\nThe default is Russian, with no summary and private processing. Select a different core language in Create operation; summaries and four default Large profiles require external AI consent. Create spends credits and is never retried. Get polls the same operation every five seconds, bounded by ten minutes or 120 responses. Inspect checks API errors before accepting done. If interrupted, retain the ID and query it before another Create. Successful text appears in Transcript.\n\nThis example handles one input item per execution. Validate single item rejects a batch before any source upload or paid Create call.",
+        "width": 1120,
+        "height": 320
+      }
+    },
+    {
+      "id": "validate-single-item",
+      "name": "Validate single item",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const items = $input.all();\nif (items.length !== 1) throw new Error('This example processes one item at a time. Run the complete sequence separately for each batch item.');\nreturn items;"
+      }
+    }
+  ],
+  "connections": {
+    "Upload form": {
+      "main": [
+        [
+          {
+            "node": "Validate single item",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create operation": {
+      "main": [
+        [
+          {
+            "node": "Track operation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Track operation": {
+      "main": [
+        [
+          {
+            "node": "Wait 5 seconds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 5 seconds": {
+      "main": [
+        [
+          {
+            "node": "Get operation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get operation": {
+      "main": [
+        [
+          {
+            "node": "Inspect operation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Inspect operation": {
+      "main": [
+        [
+          {
+            "node": "Operation finished?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Operation finished?": {
+      "main": [
+        [
+          {
+            "node": "Transcript",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait 5 seconds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate single item": {
+      "main": [
+        [
+          {
+            "node": "Create operation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "executionTimeout": 1800
+  },
+  "pinData": {},
+  "tags": []
+}
